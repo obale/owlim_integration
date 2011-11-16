@@ -1,0 +1,10 @@
+http://127.0.0.1/node/91 -> sioc:has_creator -> 1
+http://127.0.0.1/node/91 -> foaf:name -> aleobe
+http://127.0.0.1/node/91 -> dc:title -> Example Event
+http://127.0.0.1/node/91 -> dc:date -> 2011-11-07T02:11:20+0100
+http://127.0.0.1/node/91 -> dc:created -> 2011-11-07T02:11:20+0100
+http://127.0.0.1/node/91 -> dc:modified -> 2011-11-07T02:11:20+0100
+http://127.0.0.1/node/91 -> content:encoded -> This is an example event...
+http://127.0.0.1/node/91 -> dc:dateSubmitted -> 2011-01-01T00:00:00+01:00
+http://127.0.0.1/node/91 -> sti2:members -> Member1
+http://127.0.0.1/node/91 -> sti2:members -> Member2

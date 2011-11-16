@@ -1,0 +1,133 @@
+<?php
+
+function owlim_integration_help($path, $arg) {
+        switch ($path) {
+        case "admin/help#owlim_integration":
+                return '<p>'.  t("This modules stores the RDF content into an external OWLIM repository.") .'</p>';
+                break;
+        }
+}
+
+function owlim_integration_block_info() {
+        $blocks['owlim_integration'] = array(
+                'info' => t('OWLIM Integration'), //The name that will appear in the block list.
+                'cache' => DRUPAL_CACHE_PER_ROLE, //Default
+        );
+        return $blocks;
+}
+
+function get_rdf_mapping($nodeType) {
+        $myFile = "/tmp/owlim_integration.mapping";
+        $fh = fopen($myFile, 'w') or die("Can't open file!");
+
+        $hashmap = Array();
+        $rdfMapping = rdf_mapping_load('node', $nodeType);
+        foreach ( $rdfMapping as $key1 => $value1 ) {
+                foreach ( $value1 as $key2 => $value2 ) {
+                        if ( is_array($value2) )
+                                foreach ( $value2 as $key3 => $value3 ) {
+                                        fwrite($fh, $key1 . " -> " . $value1 . " -> " . $key2 . " -> " . $value2 . " -> " . $key3 . " -> " . $value3 . "\n");
+                                        $hashmap[$key1][$key3] = $value3;
+                                }
+                }
+        }
+
+        fclose($fh);
+
+        return $hashmap;
+}
+
+function build_owlim_transaction($triples) {
+        $owlimRequest = "<?xml version='1.0' encoding='UTF-8'?>\n\n";
+        $owlimRequest = $owlimRequest . "<transaction>\n";
+
+        // LOOP here for each triple
+        foreach ( $triples as $key => $value ) {
+                $owlimRequest = $owlimRequest . "\t<add>\n";
+                $owlimRequest = $owlimRequest . "\t\t<uri>" . $value['subject'] . "</uri>\n"; // SUBJECT
+                /*
+                 * TODO: Change prefix:propertyName to http://.../propertyName 
+                 *       (expand the prefix)
+                 * TODO: Check the predicate and write out the object as 
+                 *       resource or literal (dependent on predicate)
+                 */
+                $owlimRequest = $owlimRequest . "\t\t<uri>" . $value['predicate'] . "</uri>\n"; // PREDICATE
+                $owlimRequest = $owlimRequest . "\t\t<literal>" . $value['object'] . "</literal>\n"; // OBJECT (could be also: <literal></literal>)
+                $owlimRequest = $owlimRequest . "\t\t<contexts>\n";
+                $owlimRequest = $owlimRequest . "\t\t\t<uri>" . $value['context'] . "</uri>\n";
+                $owlimRequest = $owlimRequest . "\t\t</contexts>\n";
+                $owlimRequest = $owlimRequest . "\t</add>\n";
+        }
+
+        $owlimRequest = $owlimRequest . "<transaction>\n";
+
+        return $owlimRequest;
+}
+
+function convert_date($date) {
+        return format_date($date, 'custom', "Y-m-d\Th:m:sO") ;
+}
+
+function build_triple($node, $fieldName, $fieldValue, $hashmap, $fh) {
+        $nodeURL = 'http://' .$_SERVER['HTTP_HOST'] . "/node/" . $node->nid;
+//        $nodeURL = "http://www.sti2.org/node/" . $node->nid;
+        if ( array_key_exists($fieldName, $hashmap) )
+                foreach ( $hashmap[$fieldName] as $key0 => $value0 )
+                        fwrite($fh, $nodeURL . " -> " . $value0. " -> " . $fieldValue . "\n");
+
+}
+
+function owlim_integration_node_insert($node) {
+        $myFile = "/tmp/owlim_integration.log";
+        $fh = fopen($myFile, 'w') or die("Can't open file!");
+
+        $hashmap = get_rdf_mapping($node->type);
+
+        $nodeURL = 'http://' .$_SERVER['HTTP_HOST'] . "/node/" . $node->nid;
+        $count = 0;
+        $triples = array();
+        foreach ( $node as $key => $value ) {
+                if ( is_array($value) ) {
+                        foreach ( $value as $key0 => $value0 ) {
+                                if ( is_array($value0) ) {
+                                        foreach ( $value0 as $key1 => $value1 ) {
+                                                if ( is_array($value1) ) {
+                                                        foreach ( $value1 as $key2 => $value2 ) {
+                                                                if ( $key2 == "value" ) {
+                                                                        //build_triple($node, $key, $value2, $hashmap, $fh);
+                                                                        if ( array_key_exists($key, $hashmap) )
+                                                                                foreach ( $hashmap[$key] as $key0 => $value0 ) {
+                                                                                        $triples[$count] = array();
+                                                                                        $triples[$count]['subject'] = $nodeURL;
+                                                                                        $triples[$count]['predicate'] = $value0;
+                                                                                        $triples[$count]['object'] = $value2;
+                                                                                        $triples[$count]['context'] = $nodeURL;
+                                                                                        $count++;
+                                                                                }
+                                                                }
+                                                        }
+                                                }
+                                        }
+                                }
+                        }
+                } else {
+                        if ( $key == "created" || $key == "changed" )
+                                $value = convert_date($value);
+                        if ( array_key_exists($key, $hashmap) )
+                                foreach ( $hashmap[$key] as $key0 => $value0 ) {
+                                        $triples[$count] = array();
+                                        $triples[$count]['subject'] = $nodeURL;
+                                        $triples[$count]['predicate'] = $value0;
+                                        $triples[$count]['object'] = $value;
+                                        $triples[$count]['context'] = $nodeURL;
+                                        $count++;
+                                }
+                }
+        }
+
+        $owlimTransaction = build_owlim_transaction($triples);
+        fwrite($fh, $owlimTransaction);
+        fclose($fh);
+}
+
+?>

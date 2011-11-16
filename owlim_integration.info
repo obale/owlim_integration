@@ -1,0 +1,5 @@
+package = RDF
+name = OWLIM Integration
+version = 7.x-1.0-alpha1
+description = Drupal 7.x OWLIM integration developed by STI Innsbruck
+core = 7.x
