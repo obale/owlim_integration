@@ -1,11 +1,45 @@
 <?php
 
+function get_openrdf_sesame_url() {
+        $reposName = "sti2";
+        return "http://127.0.0.1:8080/openrdf-sesame/repositories/" . $reposName . "/statements";
+}
+
 function owlim_integration_help($path, $arg) {
         switch ($path) {
         case "admin/help#owlim_integration":
                 return '<p>'.  t("This modules stores the RDF content into an external OWLIM repository.") .'</p>';
                 break;
         }
+}
+
+function owlim_integration_menu() {
+        $items = array();
+
+        $items['admin/config/system/owlim-integration'] = array(
+                'title' => 'OWLIM Integration',
+                'description' => 'Configuration for Current posts module',
+                'page callback' => 'drupal_get_form',
+                'page arguments' => array('owlim_integration_form'),
+                'access arguments' => array('access administration pages'),
+                'type' => MENU_NORMAL_ITEM,
+        );
+
+        return $items;
+}
+
+function owlim_integration_form($form, &$form_state) {
+        $form['owlim_integration_max'] = array(
+                '#type' => 'textfield',
+                '#title' => t('Maximum number of posts'),
+                '#default_value' => variable_get('current_posts_max', 3),
+                '#size' => 2,
+                '#maxlength' => 2,
+                '#description' => t('The maximum number of links to display in the block.'),
+                '#required' => TRUE,
+        );
+
+        return system_settings_form($form);
 }
 
 function owlim_integration_block_info() {
@@ -17,8 +51,8 @@ function owlim_integration_block_info() {
 }
 
 function get_rdf_mapping($nodeType) {
-        $myFile = "/tmp/owlim_integration.mapping";
-        $fh = fopen($myFile, 'w') or die("Can't open file!");
+        //$myFile = "/tmp/owlim_integration.mapping";
+        //$fh = fopen($myFile, 'w') or die("Can't open file!");
 
         $hashmap = Array();
         $rdfMapping = rdf_mapping_load('node', $nodeType);
@@ -26,18 +60,27 @@ function get_rdf_mapping($nodeType) {
                 foreach ( $value1 as $key2 => $value2 ) {
                         if ( is_array($value2) )
                                 foreach ( $value2 as $key3 => $value3 ) {
-                                        fwrite($fh, $key1 . " -> " . $value1 . " -> " . $key2 . " -> " . $value2 . " -> " . $key3 . " -> " . $value3 . "\n");
+                                        //fwrite($fh, $key1 . " -> " . $value1 . " -> " . $key2 . " -> " . $value2 . " -> " . $key3 . " -> " . $value3 . "\n");
                                         $hashmap[$key1][$key3] = $value3;
                                 }
                 }
         }
 
-        fclose($fh);
+        //fclose($fh);
 
         return $hashmap;
 }
 
+function expand_prefix($rdfProperty, $namespaces) {
+        $prefix = strtok($rdfProperty, ":");
+        $property = strtok(":");
+
+        return $namespaces[$prefix] . $property;
+}
+
 function build_owlim_transaction($triples) {
+        $namespaces = rdf_get_namespaces();
+
         $owlimRequest = "<?xml version='1.0' encoding='UTF-8'?>\n\n";
         $owlimRequest = $owlimRequest . "<transaction>\n";
 
@@ -46,20 +89,23 @@ function build_owlim_transaction($triples) {
                 $owlimRequest = $owlimRequest . "\t<add>\n";
                 $owlimRequest = $owlimRequest . "\t\t<uri>" . $value['subject'] . "</uri>\n"; // SUBJECT
                 /*
-                 * TODO: Change prefix:propertyName to http://.../propertyName 
-                 *       (expand the prefix)
                  * TODO: Check the predicate and write out the object as 
                  *       resource or literal (dependent on predicate)
                  */
-                $owlimRequest = $owlimRequest . "\t\t<uri>" . $value['predicate'] . "</uri>\n"; // PREDICATE
-                $owlimRequest = $owlimRequest . "\t\t<literal>" . $value['object'] . "</literal>\n"; // OBJECT (could be also: <literal></literal>)
+                $predicate = expand_prefix($value['predicate'], $namespaces);
+                $owlimRequest = $owlimRequest . "\t\t<uri>" . $predicate . "</uri>\n"; // PREDICATE
+                if ( $predicate == "http://rdfs.org/sioc/ns#has_creator" ) {
+                        $object = 'http://' . $_SERVER['HTTP_HOST'] . "/user/" . $value['object'];
+                        $owlimRequest = $owlimRequest . "\t\t<uri>" . $object . "</uri>\n";
+                } else 
+                        $owlimRequest = $owlimRequest . "\t\t<literal>" . $value['object'] . "</literal>\n"; // OBJECT (could be also: <uri></uri>)
                 $owlimRequest = $owlimRequest . "\t\t<contexts>\n";
                 $owlimRequest = $owlimRequest . "\t\t\t<uri>" . $value['context'] . "</uri>\n";
                 $owlimRequest = $owlimRequest . "\t\t</contexts>\n";
                 $owlimRequest = $owlimRequest . "\t</add>\n";
         }
 
-        $owlimRequest = $owlimRequest . "<transaction>\n";
+        $owlimRequest = $owlimRequest . "</transaction>\n";
 
         return $owlimRequest;
 }
@@ -68,15 +114,22 @@ function convert_date($date) {
         return format_date($date, 'custom', "Y-m-d\Th:m:sO") ;
 }
 
-function build_triple($node, $fieldName, $fieldValue, $hashmap, $fh) {
-        $nodeURL = 'http://' .$_SERVER['HTTP_HOST'] . "/node/" . $node->nid;
-//        $nodeURL = "http://www.sti2.org/node/" . $node->nid;
-        if ( array_key_exists($fieldName, $hashmap) )
-                foreach ( $hashmap[$fieldName] as $key0 => $value0 )
-                        fwrite($fh, $nodeURL . " -> " . $value0. " -> " . $fieldValue . "\n");
-
+function send_to_triplestore($data) {
+        $r = new HttpRequest(get_openrdf_sesame_url(), HttpRequest::METH_POST);
+        $r->setHeaders(array('Content-Type' => 'application/x-rdftransaction'));
+        $r->setBody($data);
+        return $r->send();
 }
 
+function delete_graph($context) {
+        $url = get_openrdf_sesame_url() . "?context=" . $context;
+        $r = new HttpRequest($url, HttpRequest::METH_DELETE);
+        return $r->send();
+}
+
+/**
+ * Triggered on NODE INSERT
+ */
 function owlim_integration_node_insert($node) {
         $myFile = "/tmp/owlim_integration.log";
         $fh = fopen($myFile, 'w') or die("Can't open file!");
@@ -94,7 +147,6 @@ function owlim_integration_node_insert($node) {
                                                 if ( is_array($value1) ) {
                                                         foreach ( $value1 as $key2 => $value2 ) {
                                                                 if ( $key2 == "value" ) {
-                                                                        //build_triple($node, $key, $value2, $hashmap, $fh);
                                                                         if ( array_key_exists($key, $hashmap) )
                                                                                 foreach ( $hashmap[$key] as $key0 => $value0 ) {
                                                                                         $triples[$count] = array();
@@ -126,8 +178,30 @@ function owlim_integration_node_insert($node) {
         }
 
         $owlimTransaction = build_owlim_transaction($triples);
-        fwrite($fh, $owlimTransaction);
+        fwrite($fh, send_to_triplestore($owlimTransaction));
         fclose($fh);
+}
+
+/**
+ * Triggered on NODE DELETE
+ */
+function owlim_integration_node_delete($node) {
+        $myFile = "/tmp/owlim_integration.log";
+        $fh = fopen($myFile, 'w') or die("Can't open file!");
+
+        $nodeURL = '%3Chttp%3A%2F%2F' .$_SERVER['HTTP_HOST'] . "%2Fnode%2F" . $node->nid . "%3E";
+        fwrite($fh, delete_graph($nodeURL));
+
+        fclose($fh);
+}
+
+/**
+ * Triggered on NODE UPDATE
+ * TODO: Update only the changed fields. 
+ */
+function owlim_integration_node_update($node) {
+        owlim_integration_node_delete($node);
+        owlim_integration_node_insert($node);
 }
 
 ?>
