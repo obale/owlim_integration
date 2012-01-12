@@ -2,7 +2,8 @@ FEATURES
 ========
 
 * RDF triple export with the help of RDF mappings.
-* Hardcoded OWLIM/Sesame endpoint: http://127.0.0.1:8080/openrdf-sesame
+* Endpoint and repository id could be change in Drupal (default:
+        http://127.0.0.1:8080/openrdf-sesame/ and sti2)
 * Supported OpenRDF Sesame REST API: plain OpenRDF Sesame and OWLIM
 * Supported operations
         * ADD: 
@@ -19,6 +20,6 @@ FEATURES
 TODO
 ====
 
+* Add dependencies to the .info file
 * Improve logging capabilities for debugging purpose
-* Let the user set the triplestore endpoint and repository id in the web frontend
 * Improve the help section
