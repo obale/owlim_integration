@@ -2,6 +2,7 @@
 
 function get_openrdf_sesame_url() {
         $reposName = "sti2";
+        #return "http://community.sti2.at:8080/openrdf-sesame/repositories/" . $reposName . "/statements";
         return "http://127.0.0.1:8080/openrdf-sesame/repositories/" . $reposName . "/statements";
 }
 
@@ -18,7 +19,7 @@ function owlim_integration_menu() {
 
         $items['admin/config/system/owlim-integration'] = array(
                 'title' => 'OWLIM Integration',
-                'description' => 'Configuration for Current posts module',
+                'description' => 'Configuration for the OWLIM Integration module',
                 'page callback' => 'drupal_get_form',
                 'page arguments' => array('owlim_integration_form'),
                 'access arguments' => array('access administration pages'),
@@ -29,13 +30,23 @@ function owlim_integration_menu() {
 }
 
 function owlim_integration_form($form, &$form_state) {
-        $form['owlim_integration_max'] = array(
+        $form['owlim_integration_endpoint'] = array(
                 '#type' => 'textfield',
-                '#title' => t('Maximum number of posts'),
-                '#default_value' => variable_get('current_posts_max', 3),
-                '#size' => 2,
-                '#maxlength' => 2,
-                '#description' => t('The maximum number of links to display in the block.'),
+                '#title' => t('Triplestore URL'),
+                '#default_value' => variable_get('owlim_endpoint', 'http://127.0.0.1:8080/openrdf-sesame'),
+                '#size' => 160,
+                '#maxlength' => 160,
+                '#description' => t('The triplestore endpoint URL (REST API)'),
+                '#required' => TRUE,
+        );
+
+        $form['owlim_integration_reposid'] = array(
+                '#type' => 'textfield',
+                '#title' => t('Triplestore Repository ID'),
+                '#default_value' => variable_get('owlim_reposid', 'sti2'),
+                '#size' => 160,
+                '#maxlength' => 160,
+                '#description' => t('The triplestore repository id. Must exist.'),
                 '#required' => TRUE,
         );
 
@@ -51,22 +62,37 @@ function owlim_integration_block_info() {
 }
 
 function get_rdf_mapping($nodeType) {
-        //$myFile = "/tmp/owlim_integration.mapping";
-        //$fh = fopen($myFile, 'w') or die("Can't open file!");
 
         $hashmap = Array();
         $rdfMapping = rdf_mapping_load('node', $nodeType);
+
+//        $myFile = "/tmp/owlim_integration.mapping";
+//        $fh = fopen($myFile, 'w+') or die("Can't open file!");
+//        fwrite($fh, print_r($rdfMapping, TRUE));
+
         foreach ( $rdfMapping as $key1 => $value1 ) {
+                $type = "literal";
+                if ( array_key_exists("type", $value1) )
+                        if ( $value1['type'] == "rel" || $value1['type'] == "rev" )
+                                $type = "resource";
                 foreach ( $value1 as $key2 => $value2 ) {
-                        if ( is_array($value2) )
+                        if ( is_array($value2) ) {
                                 foreach ( $value2 as $key3 => $value3 ) {
-                                        //fwrite($fh, $key1 . " -> " . $value1 . " -> " . $key2 . " -> " . $value2 . " -> " . $key3 . " -> " . $value3 . "\n");
-                                        $hashmap[$key1][$key3] = $value3;
+                                        //fwrite($fh, $key1 . " -> " . $value1 . " -> " . $key2 . " -> " . $value2 . " -> " . $key3 . " -> " . $value3 . " -- type := " . $type . "\n");
+                                        $hashmap[$key1][$key3][0] = $value3;
+                                        $hashmap[$key1][$key3][1] = $type;
                                 }
+                        } else {
+                                if ( $key1 == "rdftype" ) {
+                                        $hashmap[$key1][$key2][0] = $value2;
+                                        $hashmap[$key1][$key2][1] = "resource";
+                                        //fwrite($fh, $key1 . " -> " . $value1 . " -> " . $key2 . " -> " . $value2 . "\n");
+                                }
+                        }
                 }
         }
 
-        //fclose($fh);
+//        fclose($fh);
 
         return $hashmap;
 }
@@ -92,13 +118,18 @@ function build_owlim_transaction($triples) {
                  * TODO: Check the predicate and write out the object as 
                  *       resource or literal (dependent on predicate)
                  */
-                $predicate = expand_prefix($value['predicate'], $namespaces);
+                $predicate = expand_prefix($value['predicate'][0], $namespaces);
                 $owlimRequest = $owlimRequest . "\t\t<uri>" . $predicate . "</uri>\n"; // PREDICATE
-                if ( $predicate == "http://rdfs.org/sioc/ns#has_creator" ) {
+
+                if ( $predicate == "http://rdfs.org/sioc/ns#has_creator" )
                         $object = 'http://' . $_SERVER['HTTP_HOST'] . "/user/" . $value['object'];
+                else
+                        $object = $value['object'];
+                if ( $value['predicate'][1] == "resource" )
                         $owlimRequest = $owlimRequest . "\t\t<uri>" . $object . "</uri>\n";
-                } else 
-                        $owlimRequest = $owlimRequest . "\t\t<literal>" . $value['object'] . "</literal>\n"; // OBJECT (could be also: <uri></uri>)
+                else
+                        $owlimRequest = $owlimRequest . "\t\t<literal>" . htmlspecialchars($object) . "</literal>\n";
+                
                 $owlimRequest = $owlimRequest . "\t\t<contexts>\n";
                 $owlimRequest = $owlimRequest . "\t\t\t<uri>" . $value['context'] . "</uri>\n";
                 $owlimRequest = $owlimRequest . "\t\t</contexts>\n";
@@ -131,9 +162,6 @@ function delete_graph($context) {
  * Triggered on NODE INSERT
  */
 function owlim_integration_node_insert($node) {
-        $myFile = "/tmp/owlim_integration.log";
-        $fh = fopen($myFile, 'w') or die("Can't open file!");
-
         $hashmap = get_rdf_mapping($node->type);
 
         $nodeURL = 'http://' .$_SERVER['HTTP_HOST'] . "/node/" . $node->nid;
@@ -176,23 +204,37 @@ function owlim_integration_node_insert($node) {
                                 }
                 }
         }
+        /*
+         * TODO: Add here somehow the triple: <$nodeURL> rdf:type <...>
+         */
+        $rdftypes = $hashmap['rdftype'];
+        $namespaces = rdf_get_namespaces();
+        foreach ( $rdftypes as $key => $value ) {
+                $triples[$count] = array();
+                $triples[$count]['subject'] = $nodeURL;
+                $triples[$count]['predicate'][0] = 'rdf:type';
+                $triples[$count]['predicate'][1] = 'resource';
+                $triples[$count]['object'] = expand_prefix($value[0], $namespaces);
+                $triples[$count]['context'] = $nodeURL;
+                $count++;
+        }
 
         $owlimTransaction = build_owlim_transaction($triples);
-        fwrite($fh, send_to_triplestore($owlimTransaction));
-        fclose($fh);
+
+        //$myFile = "/tmp/owlim_integration.log";
+        //$fh = fopen($myFile, 'w+') or die("Can't open file!");
+        //fwrite($fh, print_r($triples, True));
+        //fclose($fh);
+
+        send_to_triplestore($owlimTransaction);
 }
 
 /**
  * Triggered on NODE DELETE
  */
 function owlim_integration_node_delete($node) {
-        $myFile = "/tmp/owlim_integration.log";
-        $fh = fopen($myFile, 'w') or die("Can't open file!");
-
         $nodeURL = '%3Chttp%3A%2F%2F' .$_SERVER['HTTP_HOST'] . "%2Fnode%2F" . $node->nid . "%3E";
-        fwrite($fh, delete_graph($nodeURL));
-
-        fclose($fh);
+        delete_graph($nodeURL);
 }
 
 /**
