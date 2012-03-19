@@ -1,211 +1,214 @@
 <?php
 /*
  * Drupal OWLIM Integration Module
-   "http://community.sti2.at:8080/openrdf-sesame/repositories/" . $reposName . "/statements";
+ "http://community.sti2.at:8080/openrdf-sesame/repositories/" . $reposName . "/statements";
  */
 
 function get_openrdf_sesame_url() {
-        $reposURL = variable_get('owlim_integration_endpoint', '') . "repositories/" . variable_get('owlim_integration_reposid', '') . "/statements";
-        return $reposURL;
+    $reposURL = variable_get('owlim_integration_endpoint', '') . "repositories/" . variable_get('owlim_integration_reposid', '') . "/statements";
+    return $reposURL;
 }
 
 function owlim_integration_help($path, $arg) {
-        switch ($path) {
-        case "admin/help#owlim_integration":
-                return '<p>'.  t("This modules stores the website content as RDF in an external OWLIM repository. The endpoint end the repository id could be set on the <i>OWLIM Integration administration pages</i>.") .'</p>';
-                break;
-        }
+    switch ($path) {
+    case "admin/help#owlim_integration":
+        return '<p>'.  t("This modules stores the website content as RDF in an external OWLIM repository. The endpoint end the repository id could be set on the <i>OWLIM Integration administration pages</i>.") .'</p>';
+        break;
+    }
 }
 
 function owlim_integration_menu() {
-        $items = array();
+    $items = array();
 
-        $items['admin/config/system/owlim-integration'] = array(
-                'title' => 'OWLIM Integration',
-                'description' => 'Configuration for the OWLIM Integration module',
-                'page callback' => 'drupal_get_form',
-                'page arguments' => array('owlim_integration_form'),
-                'access arguments' => array('access administration pages'),
-                'type' => MENU_NORMAL_ITEM,
-        );
+    $items['admin/config/system/owlim-integration'] = array(
+        'title' => 'OWLIM Integration',
+        'description' => 'Configuration for the OWLIM Integration module',
+        'page callback' => 'drupal_get_form',
+        'page arguments' => array('owlim_integration_form'),
+        'access arguments' => array('access administration pages'),
+        'type' => MENU_NORMAL_ITEM,
+    );
 
-        return $items;
+    return $items;
 }
 
 function owlim_integration_form($form, &$form_state) {
-        $form['owlim_integration_endpoint'] = array(
-                '#type' => 'textfield',
-                '#title' => t('Triplestore URL'),
-                '#default_value' => variable_get('owlim_integration_endpoint', 'http://127.0.0.1:8080/openrdf-sesame/'),
-                '#size' => 160,
-                '#maxlength' => 160,
-                '#description' => t('The triplestore endpoint URL (REST API). <b>Ending with / (slash)</b>'),
-                '#required' => TRUE,
-        );
+    $form['owlim_integration_endpoint'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Triplestore URL'),
+        '#default_value' => variable_get('owlim_integration_endpoint', 'http://127.0.0.1:8080/openrdf-sesame/'),
+        '#size' => 160,
+        '#maxlength' => 160,
+        '#description' => t('The triplestore endpoint URL (REST API). <b>Ending with / (slash)</b>'),
+        '#required' => TRUE,
+    );
 
-        $form['owlim_integration_reposid'] = array(
-                '#type' => 'textfield',
-                '#title' => t('Triplestore Repository ID'),
-                '#default_value' => variable_get('owlim_integration_reposid', 'sti2'),
-                '#size' => 160,
-                '#maxlength' => 160,
-                '#description' => t('The triplestore repository id. Must exist.'),
-                '#required' => TRUE,
-        );
+    $form['owlim_integration_reposid'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Triplestore Repository ID'),
+        '#default_value' => variable_get('owlim_integration_reposid', 'sti2'),
+        '#size' => 160,
+        '#maxlength' => 160,
+        '#description' => t('The triplestore repository id. Must exist.'),
+        '#required' => TRUE,
+    );
 
-        return system_settings_form($form);
+    return system_settings_form($form);
 }
 
 function owlim_integration_block_info() {
-        $blocks['owlim_integration'] = array(
-                'info' => t('OWLIM Integration'), //The name that will appear in the block list.
-                'cache' => DRUPAL_CACHE_PER_ROLE, //Default
-        );
-        return $blocks;
+    $blocks['owlim_integration'] = array(
+        'info' => t('OWLIM Integration'), //The name that will appear in the block list.
+        'cache' => DRUPAL_CACHE_PER_ROLE, //Default
+    );
+    return $blocks;
 }
 
 function get_rdf_mapping($nodeType) {
 
-        $hashmap = Array();
-        $rdfMapping = rdf_mapping_load('node', $nodeType);
+    $hashmap = Array();
+    $rdfMapping = rdf_mapping_load('node', $nodeType);
 
-//        $myFile = "/tmp/owlim_integration.mapping";
-//        $fh = fopen($myFile, 'w+') or die("Can't open file!");
-//        fwrite($fh, print_r($rdfMapping, TRUE));
+    //        $myFile = "/tmp/owlim_integration.mapping";
+    //        $fh = fopen($myFile, 'w+') or die("Can't open file!");
+    //        fwrite($fh, print_r($rdfMapping, TRUE));
 
-        foreach ( $rdfMapping as $key1 => $value1 ) {
-                $type = "literal";
-                if ( array_key_exists("type", $value1) )
-                        if ( $value1['type'] == "rel" || $value1['type'] == "rev" )
-                                $type = "resource";
-                foreach ( $value1 as $key2 => $value2 ) {
-                        if ( is_array($value2) ) {
-                                foreach ( $value2 as $key3 => $value3 ) {
-                                        //fwrite($fh, $key1 . " -> " . $value1 . " -> " . $key2 . " -> " . $value2 . " -> " . $key3 . " -> " . $value3 . " -- type := " . $type . "\n");
-                                        $hashmap[$key1][$key3][0] = $value3;
-                                        $hashmap[$key1][$key3][1] = $type;
-                                }
-                        } else {
-                                if ( $key1 == "rdftype" ) {
-                                        $hashmap[$key1][$key2][0] = $value2;
-                                        $hashmap[$key1][$key2][1] = "resource";
-                                        //fwrite($fh, $key1 . " -> " . $value1 . " -> " . $key2 . " -> " . $value2 . "\n");
-                                }
-                        }
+    foreach ( $rdfMapping as $key1 => $value1 ) {
+        $type = "literal";
+        if ( array_key_exists("type", $value1) )
+            if ( $value1['type'] == "rel" || $value1['type'] == "rev" )
+                $type = "resource";
+        foreach ( $value1 as $key2 => $value2 ) {
+            if ( is_array($value2) ) {
+                foreach ( $value2 as $key3 => $value3 ) {
+                    //fwrite($fh, $key1 . " -> " . $value1 . " -> " . $key2 . " -> " . $value2 . " -> " . $key3 . " -> " . $value3 . " -- type := " . $type . "\n");
+                    $hashmap[$key1][$key3][0] = $value3;
+                    $hashmap[$key1][$key3][1] = $type;
                 }
+            } else {
+                if ( $key1 == "rdftype" ) {
+                    $hashmap[$key1][$key2][0] = $value2;
+                    $hashmap[$key1][$key2][1] = "resource";
+                    //fwrite($fh, $key1 . " -> " . $value1 . " -> " . $key2 . " -> " . $value2 . "\n");
+                }
+            }
         }
+    }
 
-//        fclose($fh);
+    //        fclose($fh);
 
-        return $hashmap;
+    return $hashmap;
 }
 
 function expand_prefix($rdfProperty, $namespaces) {
-        $prefix = strtok($rdfProperty, ":");
-        $property = strtok(":");
+    $prefix = strtok($rdfProperty, ":");
+    $property = strtok(":");
 
-        return $namespaces[$prefix] . $property;
+    return $namespaces[$prefix] . $property;
 }
 
 function build_owlim_transaction($triples) {
-        $namespaces = rdf_get_namespaces();
+    $namespaces = rdf_get_namespaces();
 
-        $owlimRequest = "<?xml version='1.0' encoding='UTF-8'?>\n\n";
-        $owlimRequest = $owlimRequest . "<transaction>\n";
+    $owlimRequest = "<?xml version='1.0' encoding='UTF-8'?>\n\n";
+    $owlimRequest = $owlimRequest . "<transaction>\n";
 
-        // LOOP here for each triple
-        foreach ( $triples as $key => $value ) {
-                $owlimRequest = $owlimRequest . "\t<add>\n";
-                $owlimRequest = $owlimRequest . "\t\t<uri>" . $value['subject'] . "</uri>\n"; // SUBJECT
-                /*
-                 * TODO: Check the predicate and write out the object as 
-                 *       resource or literal (dependent on predicate)
-                 */
-                $predicate = expand_prefix($value['predicate'][0], $namespaces);
-                $owlimRequest = $owlimRequest . "\t\t<uri>" . $predicate . "</uri>\n"; // PREDICATE
+    // LOOP here for each triple
+    foreach ( $triples as $key => $value ) {
+        $owlimRequest = $owlimRequest . "\t<add>\n";
+        $owlimRequest = $owlimRequest . "\t\t<uri>" . $value['subject'] . "</uri>\n"; // SUBJECT
+        /*
+         * TODO: Check the predicate and write out the object as 
+         *       resource or literal (dependent on predicate)
+         */
+        $predicate = expand_prefix($value['predicate'][0], $namespaces);
+        $owlimRequest = $owlimRequest . "\t\t<uri>" . $predicate . "</uri>\n"; // PREDICATE
 
-                if ( $predicate == "http://rdfs.org/sioc/ns#has_creator" )
-                        $object = 'http://' . $_SERVER['HTTP_HOST'] . "/user/" . $value['object'];
-                else
-                        $object = $value['object'];
-                if ( $value['predicate'][1] == "resource" )
-                        $owlimRequest = $owlimRequest . "\t\t<uri>" . $object . "</uri>\n";
-                else
-                        $owlimRequest = $owlimRequest . "\t\t<literal>" . htmlspecialchars($object) . "</literal>\n";
-                
-                $owlimRequest = $owlimRequest . "\t\t<contexts>\n";
-                $owlimRequest = $owlimRequest . "\t\t\t<uri>" . $value['context'] . "</uri>\n";
-                $owlimRequest = $owlimRequest . "\t\t</contexts>\n";
-                $owlimRequest = $owlimRequest . "\t</add>\n";
-        }
+        if ( $predicate == "http://rdfs.org/sioc/ns#has_creator" )
+            $object = 'http://' . $_SERVER['HTTP_HOST'] . "/user/" . $value['object'];
+        else
+            $object = $value['object'];
+        if ( $value['predicate'][1] == "resource" )
+            $owlimRequest = $owlimRequest . "\t\t<uri>" . $object . "</uri>\n";
+        else
+            $owlimRequest = $owlimRequest . "\t\t<literal>" . htmlspecialchars($object) . "</literal>\n";
 
-        $owlimRequest = $owlimRequest . "</transaction>\n";
+        $owlimRequest = $owlimRequest . "\t\t<contexts>\n";
+        $owlimRequest = $owlimRequest . "\t\t\t<uri>" . $value['context'] . "</uri>\n";
+        $owlimRequest = $owlimRequest . "\t\t</contexts>\n";
+        $owlimRequest = $owlimRequest . "\t</add>\n";
+    }
 
-        return $owlimRequest;
+    $owlimRequest = $owlimRequest . "</transaction>\n";
+
+    return $owlimRequest;
 }
 
 function convert_date($date) {
-        return format_date($date, 'custom', "Y-m-d\Th:m:sO") ;
+    return format_date($date, 'custom', "Y-m-d\Th:m:sO") ;
 }
 
 function send_to_triplestore($data) {
+    if ( strlen($data) > 10 ) {
         $r = new HttpRequest(get_openrdf_sesame_url(), HttpRequest::METH_POST);
         $r->setHeaders(array('Content-Type' => 'application/x-rdftransaction'));
         $r->setBody($data);
         return $r->send();
+    }
 }
 
 function delete_graph($context) {
-        $url = get_openrdf_sesame_url() . "?context=" . $context;
-        $r = new HttpRequest($url, HttpRequest::METH_DELETE);
-        return $r->send();
+    $url = get_openrdf_sesame_url() . "?context=" . $context;
+    $r = new HttpRequest($url, HttpRequest::METH_DELETE);
+    return $r->send();
 }
 
 /**
  * Triggered on NODE INSERT
  */
 function owlim_integration_node_insert($node) {
+    try {
         $hashmap = get_rdf_mapping($node->type);
 
         $nodeURL = 'http://' .$_SERVER['HTTP_HOST'] . "/node/" . $node->nid;
         $count = 0;
         $triples = array();
         foreach ( $node as $key => $value ) {
-                if ( is_array($value) ) {
-                        foreach ( $value as $key0 => $value0 ) {
-                                if ( is_array($value0) ) {
-                                        foreach ( $value0 as $key1 => $value1 ) {
-                                                if ( is_array($value1) ) {
-                                                        foreach ( $value1 as $key2 => $value2 ) {
-                                                                if ( $key2 == "value" ) {
-                                                                        if ( array_key_exists($key, $hashmap) )
-                                                                                foreach ( $hashmap[$key] as $key0 => $value0 ) {
-                                                                                        $triples[$count] = array();
-                                                                                        $triples[$count]['subject'] = $nodeURL;
-                                                                                        $triples[$count]['predicate'] = $value0;
-                                                                                        $triples[$count]['object'] = $value2;
-                                                                                        $triples[$count]['context'] = $nodeURL;
-                                                                                        $count++;
-                                                                                }
-                                                                }
-                                                        }
-                                                }
-                                        }
+            if ( is_array($value) ) {
+                foreach ( $value as $key0 => $value0 ) {
+                    if ( is_array($value0) ) {
+                        foreach ( $value0 as $key1 => $value1 ) {
+                            if ( is_array($value1) ) {
+                                foreach ( $value1 as $key2 => $value2 ) {
+                                    if ( $key2 == "value" ) {
+                                        if ( array_key_exists($key, $hashmap) )
+                                            foreach ( $hashmap[$key] as $key0 => $value0 ) {
+                                                $triples[$count] = array();
+                                                $triples[$count]['subject'] = $nodeURL;
+                                                $triples[$count]['predicate'] = $value0;
+                                                $triples[$count]['object'] = $value2;
+                                                $triples[$count]['context'] = $nodeURL;
+                                                $count++;
+                                            }
+                                    }
                                 }
+                            }
                         }
-                } else {
-                        if ( $key == "created" || $key == "changed" )
-                                $value = convert_date($value);
-                        if ( array_key_exists($key, $hashmap) )
-                                foreach ( $hashmap[$key] as $key0 => $value0 ) {
-                                        $triples[$count] = array();
-                                        $triples[$count]['subject'] = $nodeURL;
-                                        $triples[$count]['predicate'] = $value0;
-                                        $triples[$count]['object'] = $value;
-                                        $triples[$count]['context'] = $nodeURL;
-                                        $count++;
-                                }
+                    }
                 }
+            } else {
+                if ( $key == "created" || $key == "changed" )
+                    $value = convert_date($value);
+                if ( array_key_exists($key, $hashmap) )
+                    foreach ( $hashmap[$key] as $key0 => $value0 ) {
+                        $triples[$count] = array();
+                        $triples[$count]['subject'] = $nodeURL;
+                        $triples[$count]['predicate'] = $value0;
+                        $triples[$count]['object'] = $value;
+                        $triples[$count]['context'] = $nodeURL;
+                        $count++;
+                    }
+            }
         }
         /*
          * TODO: Add here somehow the triple: <$nodeURL> rdf:type <...>
@@ -213,13 +216,13 @@ function owlim_integration_node_insert($node) {
         $rdftypes = $hashmap['rdftype'];
         $namespaces = rdf_get_namespaces();
         foreach ( $rdftypes as $key => $value ) {
-                $triples[$count] = array();
-                $triples[$count]['subject'] = $nodeURL;
-                $triples[$count]['predicate'][0] = 'rdf:type';
-                $triples[$count]['predicate'][1] = 'resource';
-                $triples[$count]['object'] = expand_prefix($value[0], $namespaces);
-                $triples[$count]['context'] = $nodeURL;
-                $count++;
+            $triples[$count] = array();
+            $triples[$count]['subject'] = $nodeURL;
+            $triples[$count]['predicate'][0] = 'rdf:type';
+            $triples[$count]['predicate'][1] = 'resource';
+            $triples[$count]['object'] = expand_prefix($value[0], $namespaces);
+            $triples[$count]['context'] = $nodeURL;
+            $count++;
         }
 
         $owlimTransaction = build_owlim_transaction($triples);
@@ -229,15 +232,23 @@ function owlim_integration_node_insert($node) {
         //fwrite($fh, print_r($triples, True));
         //fclose($fh);
 
-        send_to_triplestore($owlimTransaction);
+        if ( !is_null($owlimTransaction) )
+            send_to_triplestore($owlimTransaction);
+    } catch (Exception $e) {
+        error_log($e, 0);
+    }
 }
 
 /**
  * Triggered on NODE DELETE
  */
 function owlim_integration_node_delete($node) {
+    try {
         $nodeURL = '%3Chttp%3A%2F%2F' .$_SERVER['HTTP_HOST'] . "%2Fnode%2F" . $node->nid . "%3E";
         delete_graph($nodeURL);
+    } catch (Exception $e) {
+        error_log($e, 0);
+    }
 }
 
 /**
@@ -245,8 +256,8 @@ function owlim_integration_node_delete($node) {
  * TODO: Update only the changed fields. 
  */
 function owlim_integration_node_update($node) {
-        owlim_integration_node_delete($node);
-        owlim_integration_node_insert($node);
+    owlim_integration_node_delete($node);
+    owlim_integration_node_insert($node);
 }
 
 ?>
