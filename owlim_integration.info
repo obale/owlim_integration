@@ -1,5 +1,7 @@
 package = RDF
 name = OWLIM Integration
+description = Drupal 7.x OWLIM integration developed by STI Innsbruck. Updates on each change the related triplestore. For the mapping the RDFa annotations are used.
 version = 7.x-1.1
-description = Drupal 7.x OWLIM integration developed by STI Innsbruck
 core = 7.x
+dependencies[] = rdf
+dependencies[] = entity

@@ -210,9 +210,6 @@ function owlim_integration_node_insert($node) {
                     }
             }
         }
-        /*
-         * TODO: Add here somehow the triple: <$nodeURL> rdf:type <...>
-         */
         $rdftypes = $hashmap['rdftype'];
         $namespaces = rdf_get_namespaces();
         foreach ( $rdftypes as $key => $value ) {
@@ -253,7 +250,6 @@ function owlim_integration_node_delete($node) {
 
 /**
  * Triggered on NODE UPDATE
- * TODO: Update only the changed fields. 
  */
 function owlim_integration_node_update($node) {
     owlim_integration_node_delete($node);
