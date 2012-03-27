@@ -1,7 +1,6 @@
 <?php
 /*
  * Drupal OWLIM Integration Module
- "http://community.sti2.at:8080/openrdf-sesame/repositories/" . $reposName . "/statements";
  */
 
 function get_openrdf_sesame_url() {
