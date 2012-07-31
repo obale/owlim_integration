@@ -43,7 +43,7 @@ Use _openrdf-console_ to create on the base of the template eswc2013.ttl the rep
     [some output]
     > create eswc2013.
     [interactive shell]
-    > exit
+    > exit.
 
 
 Supported operations
